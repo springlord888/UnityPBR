@@ -48,6 +48,37 @@
 			float _Smoothness;
 			sampler2D _LUT;
 
+
+			/***** function tool ******/
+			
+
+			// [Burley 2012, "Physically-Based Shading at Disney"]
+			// https://zhuanlan.zhihu.com/p/60977923
+			float3 Diffuse_Burley_Disney(float3 DiffuseColor, float Roughness, float NoV, float NoL, float VoH)
+			{
+				float PI = 3.14159;
+				float FD90 = 0.5 + 2 * VoH * VoH * Roughness * Roughness;
+				float FdV = 1 + (FD90 - 1) * Pow5(1 - NoV);
+				float FdL = 1 + (FD90 - 1) * Pow5(1 - NoL);
+				return DiffuseColor * ((1 / PI) * FdV * FdL);
+				
+			}
+
+
+			//D term 
+			//https://learnopengl.com/PBR/Lighting  & https://zhuanlan.zhihu.com/p/60977923
+			float DistributionGGX(float NoH, float roughness)
+			{
+				float PI = 3.14159;
+				float roughness2 = roughness * roughness;
+				float NoH2 = NoH * NoH;
+				float tmp = NoH2 * (roughness2 - 1) + 1;
+				return roughness2 / (PI * tmp * tmp);				
+			}
+
+			/***** function tool end******/
+
+
             v2f vert (appdata v)
             {
                 v2f o;
@@ -81,20 +112,27 @@
 				float lh = max(saturate(dot(lightDir, halfVector)), 0.000001);
 				float nh = max(saturate(dot(i.normal, halfVector)), 0.000001);
 
-				
 
+				fixed4 diffuseColorFromTexture = _Tint * tex2D(_MainTex, i.uv);
+
+				
+				//Disney Principled BRDF : https://media.disneyanimation.com/uploads/production/publication_asset/48/asset/s2012_pbs_disney_brdf_notes_v3.pdf
 				/************split line*************/
 
 				//1. DirectLight 
 				float3 diffColor = 0;
 				float3 specColor = 0;
-				float3 DirectLightResult = diffColor + specColor;
-				//1.1 Caculate Diffuse
 				
+				//1.1 Caculate Diffuse 
+				float3 diffuseTerm = Diffuse_Burley_Disney(diffuseColorFromTexture,roughness, nv, nl, vh);				
+				diffColor = diffuseTerm * lightColor * nl;
 				//1.2 Caculate Specular
 				//1.2.1 Caculate Specular D
+				float DistributionTerm = DistributionGGX(nh, roughness);
 				//1.2.2 Caculate Specular G
 				//1.2.3 Caculate Specular F
+				specColor = DistributionTerm / (4 * nl*nv) * lightColor * nl;
+				float3 DirectLightResult = diffColor + specColor;
 
 
 
