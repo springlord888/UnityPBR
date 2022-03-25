@@ -50,7 +50,13 @@
 
 
 			/***** function tool ******/
-			
+			float lerpFloat3(float3 from, float3 to, float factor)
+			{
+				float x = lerp(from.x, to.x, factor);
+				float y = lerp(from.y, to.y, factor);
+				float z = lerp(from.z, to.z, factor);
+				return float3(x,y,z);
+			}
 
 			// [Burley 2012, "Physically-Based Shading at Disney"]
 			// https://zhuanlan.zhihu.com/p/60977923
@@ -70,11 +76,41 @@
 			float DistributionGGX(float NoH, float roughness)
 			{
 				float PI = 3.14159;
+				roughness = lerp(0.002, 1, roughness);//adjust roughness, avoid 0 roughness , this is a trick for Caculate D term
 				float roughness2 = roughness * roughness;
 				float NoH2 = NoH * NoH;
 				float tmp = NoH2 * (roughness2 - 1) + 1;
 				return roughness2 / (PI * tmp * tmp);				
 			}
+
+
+
+			// GGX_Schlick   here the k if for direct lighting, k = (rougness+1)^2 / 8
+			float GeometrySchlickGGX(float NdotVorNdotL, float roughness)
+			{
+				float r = (roughness + 1.0);
+				float k = (r*r) / 8.0;
+
+				float num   = NdotVorNdotL;
+				float denom = NdotVorNdotL * (1.0 - k) + k;
+	
+				return num / denom;
+			}
+
+			//G  term
+			float GeometrySmith(float NdotV, float NdotL, float roughness)
+			{
+				float ggx2  = GeometrySchlickGGX(NdotV, roughness);
+				float ggx1  = GeometrySchlickGGX(NdotL, roughness);
+				return ggx1 * ggx2;
+			}
+
+
+			//F term cosTheta is HDotV, but some engine uses LDotH : http://filmicworlds.com/blog/optimizing-ggx-shaders-with-dotlh/
+			float3 fresnelSchlick(float cosTheta, float3 F0)
+			{
+				return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
+			} 
 
 			/***** function tool end******/
 
@@ -125,13 +161,25 @@
 				
 				//1.1 Caculate Diffuse 
 				float3 diffuseTerm = Diffuse_Burley_Disney(diffuseColorFromTexture,roughness, nv, nl, vh);				
-				diffColor = diffuseTerm * lightColor * nl;
+				//diffColor = diffuseTerm * lightColor * nl;
 				//1.2 Caculate Specular
 				//1.2.1 Caculate Specular D
 				float DistributionTerm = DistributionGGX(nh, roughness);
 				//1.2.2 Caculate Specular G
+				float GeometryTerm = GeometrySmith(nl,nv,roughness);
 				//1.2.3 Caculate Specular F
-				specColor = DistributionTerm / (4 * nl*nv) * lightColor * nl;
+			    float3 F0 = float3(0.04,0.04,0.04); 
+				F0  = lerpFloat3(F0, diffuseColorFromTexture, _Metallic);
+			    float3 FresnelTerm  = fresnelSchlick(vh, F0);
+
+
+
+				specColor = DistributionTerm / (4 * nl * nv) * lightColor * nl; 				
+				//specColor = float3(DistributionTerm, DistributionTerm, DistributionTerm);
+				specColor = float3(GeometryTerm, GeometryTerm, GeometryTerm);
+				specColor = FresnelTerm;
+
+
 				float3 DirectLightResult = diffColor + specColor;
 
 
