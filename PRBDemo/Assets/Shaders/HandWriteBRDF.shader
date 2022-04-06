@@ -161,7 +161,7 @@
 				
 				//1.1 Caculate Diffuse 
 				float3 diffuseTerm = Diffuse_Burley_Disney(diffuseColorFromTexture,roughness, nv, nl, vh);				
-				//diffColor = diffuseTerm * lightColor * nl;
+				diffColor = diffuseTerm * lightColor * nl;
 				//1.2 Caculate Specular
 				//1.2.1 Caculate Specular D
 				float DistributionTerm = DistributionGGX(nh, roughness);
@@ -174,10 +174,11 @@
 
 
 
-				specColor = DistributionTerm / (4 * nl * nv) * lightColor * nl; 				
+				specColor = (DistributionTerm * GeometryTerm * FresnelTerm) / (4 * nl * nv) * lightColor * nl;
+				//specColor = (DistributionTerm * FresnelTerm) ;
 				//specColor = float3(DistributionTerm, DistributionTerm, DistributionTerm);
-				specColor = float3(GeometryTerm, GeometryTerm, GeometryTerm);
-				specColor = FresnelTerm;
+				//specColor = float3(GeometryTerm, GeometryTerm, GeometryTerm);
+				//specColor = FresnelTerm;
 
 
 				float3 DirectLightResult = diffColor + specColor;
