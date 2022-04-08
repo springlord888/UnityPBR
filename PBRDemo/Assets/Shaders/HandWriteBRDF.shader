@@ -20,8 +20,7 @@
             #pragma vertex vert
             #pragma fragment frag
             // make fog work
-            #pragma multi_compile_fog
-			#pragma target 3.0
+            #pragma multi_compile_fog			
             #include "UnityCG.cginc"
 			#include "UnityStandardBRDF.cginc" 
 
@@ -66,7 +65,8 @@
 				float FD90 = 0.5 + 2 * VoH * VoH * Roughness * Roughness;
 				float FdV = 1 + (FD90 - 1) * Pow5(1 - NoV);
 				float FdL = 1 + (FD90 - 1) * Pow5(1 - NoL);
-				return DiffuseColor * ((1 / PI) * FdV * FdL);
+				//return DiffuseColor * ((1 / PI) * FdV * FdL);
+				return DiffuseColor * (1 * FdV * FdL); //暂时不除pi，参考unity自己的做法https://zhuanlan.zhihu.com/p/68025039
 				
 			}
 
@@ -161,7 +161,7 @@
 				
 				//1.1 Caculate Diffuse 
 				float3 diffuseTerm = Diffuse_Burley_Disney(diffuseColorFromTexture,roughness, nv, nl, vh);				
-				diffColor = diffuseTerm * lightColor * nl;
+				//diffColor = diffuseTerm * lightColor * nl;
 				//1.2 Caculate Specular
 				//1.2.1 Caculate Specular D
 				float DistributionTerm = DistributionGGX(nh, roughness);
@@ -174,12 +174,13 @@
 
 
 
-				specColor = (DistributionTerm * GeometryTerm * FresnelTerm) / (4 * nl * nv) * lightColor * nl;
+				//specColor = (DistributionTerm * GeometryTerm * FresnelTerm) / (4 * nl * nv) * lightColor * nl;
+				specColor = (DistributionTerm ) / (4 * nl * nv) * lightColor * nl;
 				//specColor = (DistributionTerm * FresnelTerm) ;
 				//specColor = float3(DistributionTerm, DistributionTerm, DistributionTerm);
 				//specColor = float3(GeometryTerm, GeometryTerm, GeometryTerm);
 				//specColor = FresnelTerm;
-
+	
 
 				float3 DirectLightResult = diffColor + specColor;
 

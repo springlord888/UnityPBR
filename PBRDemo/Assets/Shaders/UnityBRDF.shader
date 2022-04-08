@@ -25,7 +25,7 @@
             #include "UnityCG.cginc"
 			#include "UnityStandardBRDF.cginc"
 			#include "UnityPBSLighting.cginc"
-			 #pragma target 3.0
+			#pragma target 3.0
 			 
             struct appdata
             {

@@ -114,6 +114,7 @@
 				float3 F = F0 + (1 - F0) * exp2((-5.55473 * vh - 6.98316) * vh);
 				//镜面反射结果
 				float3 SpecularResult = (D * G * F * 0.25) / (nv * nl);
+				SpecularResult = (1 * G * 1 * 0.25) / (nv * nl); //Yeethon
 
 				//漫反射系数
 				float3 kd = (1 - F)*(1 - _Metallic);
@@ -121,6 +122,7 @@
 				//直接光照部分结果
 				float3 specColor = SpecularResult * lightColor * nl * FresnelTerm(1, lh) * UNITY_PI;
 				float3 diffColor = kd * Albedo * lightColor * nl;
+				diffColor = 0 * diffColor;//Yeethon
 				float3 DirectLightResult = diffColor + specColor;
 
 
@@ -151,6 +153,7 @@
 				float3 iblDiffuseResult = iblDiffuse * kdLast * Albedo;
 				float3 iblSpecularResult = iblSpecular * (Flast * envBDRF.r + envBDRF.g);
 				float3 IndirectResult = iblDiffuseResult + iblSpecularResult;
+				IndirectResult = 0 * IndirectResult; //Yeethon
 
 				/*
 				float surfaceReduction = 1.0 / (roughness*roughness + 1.0); //Liner空间
