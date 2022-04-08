@@ -25,7 +25,8 @@
             #include "UnityCG.cginc"
 			#include "UnityStandardBRDF.cginc"
 			#include "UnityPBSLighting.cginc"
-
+			 #pragma target 3.0
+			 
             struct appdata
             {
                 float4 vertex : POSITION;
@@ -38,7 +39,6 @@
                 float2 uv : TEXCOORD0;
 				float3 normal : TEXCOORD1;
 				float3 worldPos : TEXCOORD2;
-                UNITY_FOG_COORDS(1)
                 float4 vertex : SV_POSITION;
             };
 
@@ -50,6 +50,7 @@
 
 
 
+
             v2f vert (appdata v)
             {
                 v2f o;
@@ -58,9 +59,41 @@
 				o.normal = normalize(o.normal);
 				o.worldPos = mul(unity_ObjectToWorld, v.vertex);
                 o.uv = TRANSFORM_TEX(v.uv, _MainTex);
-                UNITY_TRANSFER_FOG(o,o.vertex);
                 return o;
             }
+
+
+            fixed4 frag2 (v2f i) : SV_Target
+            {
+				i.normal = normalize(i.normal);
+				float3 lightDir = _WorldSpaceLightPos0.xyz;
+				float3 viewDir = normalize(_WorldSpaceCameraPos - i.worldPos);
+				float3 lightColor = _LightColor0.rgb;
+
+				float3 specularTint;
+				float oneMinusReflectivity;
+				float3 albedo = tex2D(_MainTex, i.uv).rgb * _Tint.rgb;
+				albedo = DiffuseAndSpecularFromMetallic( // 从金属度生成漫反射颜色，镜面反射颜色等
+					albedo, _Metallic, specularTint, oneMinusReflectivity
+				);
+				
+				UnityLight light;
+				light.color = lightColor;
+				light.dir = lightDir;
+				light.ndotl = DotClamped(i.normal, lightDir);
+				UnityIndirect indirectLight;
+				indirectLight.diffuse = 0;
+				indirectLight.specular = 0;
+
+				return UNITY_BRDF_PBS( //生成直接光pbr结果
+					albedo, specularTint,
+					oneMinusReflectivity, _Smoothness,
+					i.normal, viewDir,
+					light, indirectLight
+				);
+
+            }
+
 
             fixed4 frag (v2f i) : SV_Target
             {
@@ -97,7 +130,6 @@
 
               
                 // apply fog
-                UNITY_APPLY_FOG(i.fogCoord, col);
                 return pbsColor;
             }
             ENDCG
