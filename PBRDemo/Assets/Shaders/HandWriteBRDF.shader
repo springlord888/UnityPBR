@@ -20,7 +20,8 @@
             #pragma vertex vert
             #pragma fragment frag
             // make fog work
-            #pragma multi_compile_fog			
+            #pragma multi_compile_fog		
+			#pragma target 3.0
             #include "UnityCG.cginc"
 			#include "UnityStandardBRDF.cginc" 
 
@@ -66,8 +67,21 @@
 				float FdV = 1 + (FD90 - 1) * Pow5(1 - NoV);
 				float FdL = 1 + (FD90 - 1) * Pow5(1 - NoL);
 				//return DiffuseColor * ((1 / PI) * FdV * FdL);
-				return DiffuseColor * (1 * FdV * FdL); //暂时不除pi，参考unity自己的做法https://zhuanlan.zhihu.com/p/68025039
+				return DiffuseColor * (1 * FdV * FdL); //暂时不除pi，参考unity自己的做法https://zhuanlan.zhihu.com/p/68025039				
 				
+			}
+
+			
+			// https://zhuanlan.zhihu.com/p/68025039
+			float3 Diffuse_Zhihu(float3 DiffuseColor, float Metallic,float vh)
+			{
+				float3 FF0 = lerp(unity_ColorSpaceDielectricSpec.rgb, DiffuseColor, Metallic);
+				float3 F = FF0 + (1 - FF0) * exp2((-5.55473 * vh - 6.98316) * vh);
+				float3 kd = (1 - F)*(1 - Metallic);
+
+				return DiffuseColor * kd; //暂时不除pi，参考unity自己的做法https://zhuanlan.zhihu.com/p/68025039
+				return DiffuseColor; //暂时不除pi，参考unity自己的做法https://zhuanlan.zhihu.com/p/68025039
+
 			}
 
 
@@ -111,6 +125,18 @@
 			{
 				return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
 			} 
+
+			// https://zhuanlan.zhihu.com/p/68025039
+			float3 fresnelSchlick_Zhihu(float3 DiffuseColor, float Metallic,float3 vh)
+			{
+
+				//unity_ColorSpaceDielectricSpec.rgb这玩意大概是float3(0.04, 0.04, 0.04)，就是个经验值
+				float3 F0 = lerp(unity_ColorSpaceDielectricSpec.rgb, DiffuseColor, Metallic);
+				//float3 F = lerp(pow((1 - max(vh, 0)),5), 1, F0);//是hv不是nv
+				return  F0 + (1 - F0) * exp2((-5.55473 * vh - 6.98316) * vh);
+
+	
+			}
 
 			/***** function tool end******/
 
@@ -160,8 +186,9 @@
 				float3 specColor = 0;
 				
 				//1.1 Caculate Diffuse 
-				float3 diffuseTerm = Diffuse_Burley_Disney(diffuseColorFromTexture,roughness, nv, nl, vh);				
-				//diffColor = diffuseTerm * lightColor * nl;
+				//float3 diffuseTerm = Diffuse_Burley_Disney(diffuseColorFromTexture,roughness, nv, nl, vh);				
+				float3 diffuseTerm = Diffuse_Zhihu(diffuseColorFromTexture, _Metallic, vh);
+				diffColor = diffuseTerm * lightColor * nl;
 				//1.2 Caculate Specular
 				//1.2.1 Caculate Specular D
 				float DistributionTerm = DistributionGGX(nh, roughness);
@@ -170,12 +197,14 @@
 				//1.2.3 Caculate Specular F
 			    float3 F0 = float3(0.04,0.04,0.04); 
 				F0  = lerpFloat3(F0, diffuseColorFromTexture, _Metallic);
-			    float3 FresnelTerm  = fresnelSchlick(vh, F0);
+			    //float3 FresnelTerm  = fresnelSchlick(vh, F0);
+			    float3 FresnelTerm  = fresnelSchlick_Zhihu(diffuseColorFromTexture, _Metallic ,  vh);// zhihu version
 
 
 
 				//specColor = (DistributionTerm * GeometryTerm * FresnelTerm) / (4 * nl * nv) * lightColor * nl;
 				specColor = (DistributionTerm ) / (4 * nl * nv) * lightColor * nl;
+				specColor = (DistributionTerm *  GeometryTerm * FresnelTerm) / (4 * nl * nv)* lightColor * nl;				
 				//specColor = (DistributionTerm * FresnelTerm) ;
 				//specColor = float3(DistributionTerm, DistributionTerm, DistributionTerm);
 				//specColor = float3(GeometryTerm, GeometryTerm, GeometryTerm);
