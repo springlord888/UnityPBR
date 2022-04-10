@@ -114,17 +114,15 @@
 				float3 F = F0 + (1 - F0) * exp2((-5.55473 * vh - 6.98316) * vh);
 				//镜面反射结果
 				float3 SpecularResult = (D * G * F * 0.25) / (nv * nl);
-				float mySpecularResult = (D  * G * F * 0.25) / (nv * nl); //Yeethon
 
 				//漫反射系数
 				float3 kd = (1 - F)*(1 - _Metallic);
 
 				//直接光照部分结果
 				float3 specColor = SpecularResult * lightColor * nl * FresnelTerm(1, lh) * UNITY_PI;
-				specColor = mySpecularResult * lightColor * nl;// Yeethon
 				float3 diffColor = kd * Albedo * lightColor * nl;
 				float3 DirectLightResult = diffColor + specColor;
-				DirectLightResult = diffColor + specColor;//Yeethon
+
 
 
 
@@ -137,6 +135,8 @@
 				ambient_contrib.b = dot(unity_SHAb, half4(i.normal, 1.0));
 				*/
 
+
+				
 				float3 iblDiffuse = max(half3(0, 0, 0), ambient + ambient_contrib);
 
 				float mip_roughness = perceptualRoughness * (1.7 - 0.7 * perceptualRoughness);
@@ -155,17 +155,21 @@
 				float3 iblDiffuseResult = iblDiffuse * kdLast * Albedo;
 				float3 iblSpecularResult = iblSpecular * (Flast * envBDRF.r + envBDRF.g);
 				float3 IndirectResult = iblDiffuseResult + iblSpecularResult;
+				
 
-				/*
+				
+				
 				float surfaceReduction = 1.0 / (roughness*roughness + 1.0); //Liner空间
 				//float surfaceReduction = 1.0 - 0.28*roughness*perceptualRoughness;  //Gamma空间
 				float oneMinusReflectivity = 1 - max(max(SpecularResult.r, SpecularResult.g), SpecularResult.b);
 				float grazingTerm = saturate(_Smoothness + (1 - oneMinusReflectivity));
-				float4 IndirectResult = float4(iblDiffuse * kdLast * Albedo + iblSpecular * surfaceReduction * FresnelLerp(F0, grazingTerm, nv), 1);
-				*/
+				//这里主要是针对Indirect的SPecular的partII计算优化，不再使用LUT查询，而使用直接计算拟合得到
+				IndirectResult = float4(iblDiffuse * kdLast * Albedo + iblSpecular * surfaceReduction * FresnelLerp(F0, grazingTerm, nv), 1);
+
+
+
 
 				float4 result = float4(DirectLightResult + IndirectResult, 1);
-				result = float4(DirectLightResult , 1);
 
 
 				return result;

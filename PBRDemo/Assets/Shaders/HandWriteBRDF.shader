@@ -11,6 +11,9 @@
     }
     SubShader
     {
+			Tags {
+				"LightMode" = "ForwardBase"
+			}
         Tags { "RenderType"="Opaque" }
         LOD 100
 
@@ -80,7 +83,7 @@
 				float3 kd = (1 - F)*(1 - Metallic);
 
 				return DiffuseColor * kd; //暂时不除pi，参考unity自己的做法https://zhuanlan.zhihu.com/p/68025039
-				return DiffuseColor; //暂时不除pi，参考unity自己的做法https://zhuanlan.zhihu.com/p/68025039
+
 
 			}
 
@@ -138,6 +141,19 @@
 	
 			}
 
+			// https://zhuanlan.zhihu.com/p/68025039
+			float3 fresnelSchlickRoughness(float cosTheta, float3 F0, float roughness)
+			{
+				return F0 + (max(float3(1.0 - roughness, 1.0 - roughness, 1.0 - roughness), F0) - F0) * pow(1.0 - cosTheta, 5.0);
+			}
+
+
+			inline half3 GetFresnelTerm(half3 F0, half cosA)
+			{
+				half t = Pow5(1 - cosA);   // ala Schlick interpoliation
+				return F0 + (1 - F0) * t;
+			}
+
 			/***** function tool end******/
 
 
@@ -175,7 +191,7 @@
 				float nh = max(saturate(dot(i.normal, halfVector)), 0.000001);
 
 
-				fixed4 diffuseColorFromTexture = _Tint * tex2D(_MainTex, i.uv);
+				float3 diffuseColorFromTexture = _Tint * tex2D(_MainTex, i.uv);
 
 				
 				//Disney Principled BRDF : https://media.disneyanimation.com/uploads/production/publication_asset/48/asset/s2012_pbs_disney_brdf_notes_v3.pdf
@@ -196,7 +212,8 @@
 				float GeometryTerm = GeometrySmith(nl,nv,roughness);
 				//1.2.3 Caculate Specular F
 			    float3 F0 = float3(0.04,0.04,0.04); 
-				F0  = lerpFloat3(F0, diffuseColorFromTexture, _Metallic);
+				//F0  = lerpFloat3(F0, diffuseColorFromTexture, _Metallic);
+				F0 = lerp(unity_ColorSpaceDielectricSpec.rgb, diffuseColorFromTexture, _Metallic);
 			    //float3 FresnelTerm  = fresnelSchlick(vh, F0);
 			    float3 FresnelTerm  = fresnelSchlick_Zhihu(diffuseColorFromTexture, _Metallic ,  vh);// zhihu version
 
@@ -204,29 +221,66 @@
 
 				//specColor = (DistributionTerm * GeometryTerm * FresnelTerm) / (4 * nl * nv) * lightColor * nl;
 				specColor = (DistributionTerm ) / (4 * nl * nv) * lightColor * nl;
-				specColor = (DistributionTerm *  GeometryTerm * FresnelTerm) / (4 * nl * nv)* lightColor * nl;				
+				specColor = (DistributionTerm *  GeometryTerm * FresnelTerm) / (4 * nl * nv)* lightColor * nl* GetFresnelTerm(1, lh) * UNITY_PI;//参考知乎，多乘了* FresnelTerm(1, lh) * UNITY_PI
 				//specColor = (DistributionTerm * FresnelTerm) ;
 				//specColor = float3(DistributionTerm, DistributionTerm, DistributionTerm);
 				//specColor = float3(GeometryTerm, GeometryTerm, GeometryTerm);
-				//specColor = FresnelTerm;
-	
-
 				float3 DirectLightResult = diffColor + specColor;
 
 
 
-				/************split line*************/
+				/************split line*************/				
+				float3 Flast = fresnelSchlickRoughness(max(nv, 0.0), F0, roughness);
+				float kdLast = (1 - Flast) * (1 - _Metallic);
 
 				//2. IndirectLight
+				//// 2.1 Caculate Diffuse
 				float3 iblDiffuseResult = 0;
-				float3 iblSpecularResult = 0;
-				float3 IndirectResult = iblDiffuseResult + iblSpecularResult;
 
-				//2.1 Caculate Diffuse
-				//2.2 Caculate Specular
+				float3 ambient = 0.03 * diffuseColorFromTexture;
+				half3 ambient_contrib = ShadeSH9(float4(i.normal, 1));
+				
+				float3 iblDiffuseTerm = max(half3(0, 0, 0), ambient + ambient_contrib);
+				iblDiffuseResult = iblDiffuseTerm * diffuseColorFromTexture * kdLast;
+
+
+
 				
 
+				//// 2.2 Caculate Specular
+				
+				float3 iblSpecularResult = 0;
+				
+				//// 2.2.1 Specular PartI: pre-filtered Environment map
+				float mip_roughness = perceptualRoughness * (1.7 - 0.7 * perceptualRoughness);
+				float3 reflectVec = reflect(-viewDir, i.normal);
+
+				half mip = mip_roughness * UNITY_SPECCUBE_LOD_STEPS;
+				half4 rgbm = UNITY_SAMPLE_TEXCUBE_LOD(unity_SpecCube0, reflectVec, mip); //根据粗糙度生成lod级别对贴图进行三线性采样
+
+				float3 iblSpecular1 = DecodeHDR(rgbm, unity_SpecCube0_HDR);
+
+				//// 2.2.2 Specular PartII
+				float2 envBDRF = tex2D(_LUT, float2(lerp(0, 0.99, nv), lerp(0, 0.99, roughness))).rg; // LUT采样
+				
+				float surfaceReduction = 1.0 / (roughness*roughness + 1.0); //Liner空间
+				//float surfaceReduction = 1.0 - 0.28*roughness*perceptualRoughness;  //Gamma空间
+				float3 SpecularResult = (DistributionTerm) / (4 * nl * nv);//不懂这里为啥还要借用直接光计算里的数据
+				float oneMinusReflectivity = 1 - max(max(SpecularResult.r, SpecularResult.g), SpecularResult.b);
+				float grazingTerm = saturate(_Smoothness + (1 - oneMinusReflectivity));
+				float3 iblSpecular2 = surfaceReduction * FresnelLerp(F0, grazingTerm, nv);
+
+				// conclude
+				iblSpecularResult = iblSpecular1 * iblSpecular2;
+
+				
+
+
+				float3 IndirectResult = iblDiffuseResult + iblSpecularResult;
+								
+
 				float4 result = float4(DirectLightResult + IndirectResult, 1);
+		
 
 				return result;
             }
